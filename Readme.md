@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project is a Rust implementation of the Multiple Polynomial Quadratic Sieve (MPQS) algorithm, an integer factorization method for large composite numbers. The implementation is based on the principles outlined in the paper "The Quadratic Sieve Factoring Algorithm" by Eric Landquist.
+This project is a Rust implementation of the Multiple Polynomial Quadratic Sieve (MPQS) algorithm, an integer factorization method for large composite numbers. The implementation is based on the principles outlined in the paper "The Quadratic Sieve Factoring Algorithm" . [Here is the paper](http://www.cs.virginia.edu/crab/QFS_Simple.pdf)
 
 The algorithm's goal is to find a non-trivial factor of a number `n` by finding integers `x` and `y` that satisfy the congruence $x^2 \equiv y^2 \pmod{n}$.
 
@@ -23,4 +23,7 @@ The algorithm's goal is to find a non-trivial factor of a number `n` by finding 
 
 ### 4. Factor Extraction
 * **Function(s):** `mpqs()` 
-* **Description:** Each dependency we have found ensures that the product of the corresponding `Q(xᵢ)` values is a perfect square, and let's call it `Y²`. This leads to the final congruence `X² ≡ Y² (mod n)`. The program then computes `gcd(X - Y, n)` to find a non-trivial factor. Since any dependency has at least a 50% chance of success, the program iterates through all found dependencies until a non-triival factor is discovered.
+* **Description:** Each dependency we have found ensures that the product of the corresponding `Q(xᵢ)` values is a perfect square, and let's call it `Y²`. This leads to the final congruence `X² ≡ Y² (mod n)`. The program then computes `gcd(X - Y, n)` to find a non-trivial factor. Since any dependency has at least a 50% chance of success, the program iterates through all found dependencies until a non-triival factor is discovered. 
+
+### Example Usage
+In the main function, we provide a simple example to factorize 10666351. The final answer should be `10333351 = 2521 * 4231`. Feel free to try other big composite numbers! A kind note is that you can try larger `m_val` and `fb_limit` when you fail to factorize some very large composite numbers. `m_val` represents the boundary value of sieving interval `[-M,M]` and `fb_limit` represents the upper limit for the prime base.
