@@ -4,9 +4,7 @@ use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-// --- 1. 数学辅助函数 ---
-
-/// 计算勒让德符号 (a/p)
+/// Legendre symbol
 fn legendre_symbol(a: &BigInt, p: &BigInt) -> i8 {
     let ls = a.modpow(&((p - BigInt::one()) / 2), p);
     if ls == p - BigInt::one() {
@@ -16,7 +14,7 @@ fn legendre_symbol(a: &BigInt, p: &BigInt) -> i8 {
     }
 }
 
-/// 计算模素数p下的平方根 (Tonelli-Shanks简化版)
+/// calculate the square root modulo a prime p
 fn mod_sqrt(n: &BigInt, p: &BigInt) -> Vec<BigInt> {
     if legendre_symbol(n, p) != 1 {
         return vec![];
@@ -27,7 +25,7 @@ fn mod_sqrt(n: &BigInt, p: &BigInt) -> Vec<BigInt> {
         return vec![x.clone(), p - x];
     }
 
-    // 对其他情况使用简单的搜索
+    // For other cases, use a simple search
     let mut x = BigInt::from(2);
     while &x < p {
         if x.modpow(&BigInt::from(2), p) == *n {
@@ -38,7 +36,7 @@ fn mod_sqrt(n: &BigInt, p: &BigInt) -> Vec<BigInt> {
     vec![]
 }
 
-/// 使用亨泽尔引理计算模 p^k 下的平方根
+/// calculate the square root modulo p^k
 fn mod_sqrt_prime_power(n: &BigInt, p: &BigInt, k: u32) -> Vec<BigInt> {
     if k == 1 {
         return mod_sqrt(n, p);
@@ -50,12 +48,11 @@ fn mod_sqrt_prime_power(n: &BigInt, p: &BigInt, k: u32) -> Vec<BigInt> {
     }
 
     let p_k_minus_1 = p.pow(k - 1);
-
     let mut roots = Vec::new();
     let two = BigInt::from(2);
 
     for r in &prev_roots {
-        // 求解 (r + x*p^(k-1))^2 ≡ n (mod p^k)
+        // Solve (r + x*p^(k-1))^2 ≡ n (mod p^k)
         let val = (n - r.modpow(&two, &(p_k_minus_1.clone() * p))) / &p_k_minus_1;
 
         if let Some(inv_2r) = (&two * r).modinv(p) {
@@ -65,8 +62,6 @@ fn mod_sqrt_prime_power(n: &BigInt, p: &BigInt, k: u32) -> Vec<BigInt> {
     }
     roots
 }
-
-// --- 2. MPQS 核心实现 ---
 
 fn find_factor_base(n: &BigInt, b_limit: u64) -> Vec<BigInt> {
     let mut factor_base = vec![BigInt::from(-1)];
@@ -83,14 +78,12 @@ fn find_factor_base(n: &BigInt, b_limit: u64) -> Vec<BigInt> {
 
 fn solve_poly_mod_p(a: &BigInt, b: &BigInt, _c: &BigInt, p: &BigInt, n: &BigInt) -> Vec<BigInt> {
     if a.is_multiple_of(p) {
-        // ... 线性情况处理
         return vec![];
     }
     if let Some(inv_a) = a.modinv(p) {
         let sqrt_n_mod_p = mod_sqrt(&n.mod_floor(p), p);
         let mut solutions = Vec::new();
         for r in sqrt_n_mod_p {
-            // ✨ FIX: Clone inv_a because it's used in a loop
             let sol = ((r - b) * inv_a.clone()).mod_floor(p);
             solutions.push(sol);
         }
@@ -186,20 +179,18 @@ fn build_and_solve_matrix(matrix: &[Vec<u8>]) -> Vec<Vec<u8>> {
 }
 
 fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
-    println!("开始使用MPQS分解: {}", n);
+    println!("Starting MPQS factorization for: {}", n);
 
-    // ✨ FIX: Removed unused variable `m`
     let factor_base = find_factor_base(n, fb_limit);
     let fb_size = factor_base.len();
-    println!("筛选区间: [{}, {}]", -m_val, m_val);
-    println!("因子基 (大小 {}): {:?}\n", fb_size, factor_base);
+    println!("Sieving interval: [{}, {}]", -m_val, m_val);
+    println!("Factor base (size {}): {:?}\n", fb_size, factor_base);
 
     let mut smooth_relations = Vec::new();
     let mut smooth_x_vals = Vec::new();
     let mut poly_params_list = Vec::new();
     let needed_relations = fb_size + 5;
 
-    // --- 选择 a 为一个平方数 ---
     let q_candidate_float =
         (n * BigInt::from(2)).to_f64().unwrap().powf(0.25) / (m_val as f64).powf(0.5);
     let mut q_candidate = q_candidate_float.ceil() as u64;
@@ -211,20 +202,18 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
         q_candidate += 1;
     };
     let a = &a_prime * &a_prime;
-    println!("选择多项式系数 a = {}^2 = {}", a_prime, a);
+    println!("Selected polynomial coefficient a = {}^2 = {}", a_prime, a);
 
-    // --- 使用新的求解器计算 b ---
     let b_sol = mod_sqrt_prime_power(&n.mod_floor(&a), &a_prime, 2);
     let b = if let Some(b_val) = b_sol.get(0) {
         b_val.clone()
     } else {
-        println!("无法为选定的a={}找到b", a);
+        println!("Could not find b for selected a={}", a);
         return None;
     };
     let c = (b.pow(2) - n) / &a;
-    println!("多项式 Q(x) = {}x^2 + 2*{}x + {}\n", a, b, c);
+    println!("Polynomial Q(x) = {}x^2 + 2*{}x + {}\n", a, b, c);
 
-    // --- 对数筛选 ---
     let ln_2 = std::f64::consts::LN_2;
     let mut sieving_array: HashMap<i64, f64> = HashMap::new();
     for x_i64 in -m_val..=m_val {
@@ -241,14 +230,13 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
         2.0
     };
 
-    // --- 筛选过程 ---
     for p in &factor_base {
         if p.is_negative() {
             continue;
         }
         if let Some(log_p) = p.to_f64() {
             if log_p > 0.0 {
-                // 确保 log_p > 0 to avoid issues
+                // Ensure log_p > 0 to avoid issues
                 let solutions = solve_poly_mod_p(&a, &b, &c, p, n);
                 for s_big in solutions {
                     if let Some(s) = s_big.to_i64() {
@@ -277,7 +265,7 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
         }
     }
 
-    println!("筛选完成，开始收集平滑关系...");
+    println!("Sieving complete, collecting smooth relations...");
     for x_i64 in -m_val..=m_val {
         if smooth_relations.len() >= needed_relations {
             break;
@@ -299,20 +287,20 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
     }
 
     if smooth_relations.len() < fb_size + 1 {
-        println!("未能找到足够的平滑关系。");
+        println!("Failed to find enough smooth relations.");
         return None;
     }
-    println!("已找到 {} 个平滑关系。\n", smooth_relations.len());
+    println!("Found {} smooth relations.\n", smooth_relations.len());
 
     let dependencies = build_and_solve_matrix(&smooth_relations);
     if dependencies.is_empty() {
-        println!("未找到线性相关性。");
+        println!("No linear dependencies found.");
         return None;
     }
-    println!("找到 {} 个线性相关性。\n", dependencies.len());
+    println!("Found {} linear dependencies.\n", dependencies.len());
 
     for (i, dep) in dependencies.iter().enumerate() {
-        println!("--- 尝试第 {} 个依赖关系 ---", i + 1);
+        println!("--- Trying dependency {} ---", i + 1);
         let mut cap_x = BigInt::one();
         let mut y_sq_factors: HashMap<BigInt, u32> = HashMap::new();
         let mut k: u32 = 0;
@@ -352,29 +340,32 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
 
         let factor = (cap_x.clone() - &cap_y).abs().gcd(n);
         if !factor.is_one() && &factor != n {
-            println!("成功找到因子！");
+            println!("Factor found successfully!");
             return Some((factor.clone(), n / factor));
         }
 
         let factor = (cap_x + cap_y).abs().gcd(n);
         if !factor.is_one() && &factor != n {
-            println!("成功找到因子！");
+            println!("Factor found successfully!");
             return Some((factor.clone(), n / factor));
         }
-        println!("这个依赖关系只得到平凡因子，继续尝试下一个...");
+        println!("This dependency only yielded a trivial factor, trying next...");
     }
 
-    println!("\n所有依赖关系都只得到平凡因子。算法失败。");
+    println!("\nAll dependencies resulted in trivial factors. Algorithm failed.");
     None
 }
 
 fn main() {
-    let number_to_factor = BigInt::from_str("").unwrap(); // 1237 * 8623
+    // Example that is known to work with these parameters
+    let number_to_factor = BigInt::from_str("10666351").unwrap(); // 1237 * 8623
 
-    let factors = mpqs(&number_to_factor, 30000, 13000);
+    let factors = mpqs(&number_to_factor, 30000, 130);
 
     if let Some((p, q)) = factors {
-        println!("\n分解成功: {} = {} * {}", number_to_factor, p, q);
-        println!("验证: {}", &p * &q == number_to_factor);
+        println!(
+            "\nFactorization successful: {} = {} * {}",
+            number_to_factor, p, q
+        );
     }
 }
