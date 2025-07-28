@@ -357,7 +357,6 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
 }
 
 fn main() {
-    // Example that is known to work with these parameters
     let number_to_factor = BigInt::from_str("10666351").unwrap(); // 1237 * 8623
 
     let factors = mpqs(&number_to_factor, 30000, 130);
