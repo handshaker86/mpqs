@@ -92,31 +92,6 @@ fn solve_poly_mod_p(a: &BigInt, b: &BigInt, _c: &BigInt, p: &BigInt, n: &BigInt)
     vec![]
 }
 
-fn trial_division(num: &BigInt, factor_base: &[BigInt]) -> Option<Vec<u8>> {
-    let mut num_abs = num.abs();
-    let mut factors_exp = vec![0; factor_base.len()];
-
-    if num.sign() == Sign::Minus {
-        factors_exp[0] = 1;
-    }
-
-    for (i, p) in factor_base.iter().enumerate() {
-        if p.is_negative() {
-            continue;
-        }
-        while num_abs.is_multiple_of(p) {
-            factors_exp[i] = (factors_exp[i] + 1) % 2;
-            num_abs /= p;
-        }
-    }
-
-    if num_abs.is_one() {
-        Some(factors_exp)
-    } else {
-        None
-    }
-}
-
 fn build_and_solve_matrix(matrix: &[Vec<u8>]) -> Vec<Vec<u8>> {
     if matrix.is_empty() {
         return vec![];
@@ -186,9 +161,6 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
     println!("Sieving interval: [{}, {}]", -m_val, m_val);
     println!("Factor base (size {}): {:?}\n", fb_size, factor_base);
 
-    let mut smooth_relations = Vec::new();
-    let mut smooth_x_vals = Vec::new();
-    let mut poly_params_list = Vec::new();
     let needed_relations = fb_size + 5;
 
     let q_candidate_float =
@@ -214,51 +186,65 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
     let c = (b.pow(2) - n) / &a;
     println!("Polynomial Q(x) = {}x^2 + 2*{}x + {}\n", a, b, c);
 
-    let ln_2 = std::f64::consts::LN_2;
-    let mut sieving_array: HashMap<i64, f64> = HashMap::new();
+    let mut sieving_values: HashMap<i64, BigInt> = HashMap::new();
+    let mut exponent_vectors: HashMap<i64, Vec<u8>> = HashMap::new();
+
     for x_i64 in -m_val..=m_val {
         let x = BigInt::from(x_i64);
         let q_x = &a * &x * &x + BigInt::from(2) * &b * &x + &c;
         if !q_x.is_zero() {
-            sieving_array.insert(x_i64, q_x.abs().bits() as f64 * ln_2);
+            sieving_values.insert(x_i64, q_x);
+            exponent_vectors.insert(x_i64, vec![0; fb_size]);
         }
     }
 
-    let threshold = if fb_size > 1 {
-        (factor_base.last().unwrap().bits() as f64 * ln_2) * 2.0
-    } else {
-        2.0
-    };
-
-    for p in &factor_base {
-        if p.is_negative() {
+    for (i, p) in factor_base.iter().enumerate() {
+        if p.is_one() || p.is_negative() {
             continue;
         }
-        if let Some(log_p) = p.to_f64() {
-            if log_p > 0.0 {
-                // Ensure log_p > 0 to avoid issues
-                let solutions = solve_poly_mod_p(&a, &b, &c, p, n);
-                for s_big in solutions {
-                    if let Some(s) = s_big.to_i64() {
-                        if let Some(p_i64) = p.to_i64() {
-                            if p_i64 == 0 {
-                                continue;
-                            }
-                            // Sieve positive side
-                            for x_val in (s..=m_val).step_by(p_i64 as usize) {
-                                if let Some(val) = sieving_array.get_mut(&x_val) {
-                                    *val -= log_p.ln();
+
+        let solutions = solve_poly_mod_p(&a, &b, &c, p, n);
+        for s_big in solutions {
+            if let Some(s) = s_big.to_i64() {
+                if let Some(p_i64) = p.to_i64() {
+                    if p_i64 == 0 {
+                        continue;
+                    }
+
+                    // sieve positive side
+                    let mut current_x = s;
+                    while current_x <= m_val {
+                        if let Some(q_val) = sieving_values.get_mut(&current_x) {
+                            if q_val.is_multiple_of(p) {
+                                let mut exp_count = 0;
+                                while q_val.is_multiple_of(p) {
+                                    *q_val /= p;
+                                    exp_count += 1;
                                 }
-                            }
-                            // Sieve negative side
-                            let mut x_val = s - p_i64;
-                            while x_val >= -m_val {
-                                if let Some(val) = sieving_array.get_mut(&x_val) {
-                                    *val -= log_p.ln();
+                                if let Some(vec) = exponent_vectors.get_mut(&current_x) {
+                                    vec[i] = (exp_count % 2) as u8;
                                 }
-                                x_val -= p_i64;
                             }
                         }
+                        current_x += p_i64;
+                    }
+
+                    // sieve negative side
+                    let mut current_x = s - p_i64;
+                    while current_x >= -m_val {
+                        if let Some(q_val) = sieving_values.get_mut(&current_x) {
+                            if q_val.is_multiple_of(p) {
+                                let mut exp_count = 0;
+                                while q_val.is_multiple_of(p) {
+                                    *q_val /= p;
+                                    exp_count += 1;
+                                }
+                                if let Some(vec) = exponent_vectors.get_mut(&current_x) {
+                                    vec[i] = (exp_count % 2) as u8;
+                                }
+                            }
+                        }
+                        current_x -= p_i64;
                     }
                 }
             }
@@ -266,23 +252,25 @@ fn mpqs(n: &BigInt, m_val: i64, fb_limit: u64) -> Option<(BigInt, BigInt)> {
     }
 
     println!("Sieving complete, collecting smooth relations...");
+    let mut smooth_relations = Vec::new();
+    let mut smooth_x_vals = Vec::new();
+    let mut poly_params_list = Vec::new();
+
     for x_i64 in -m_val..=m_val {
-        if smooth_relations.len() >= needed_relations {
-            break;
-        }
-        if let Some(rem_log) = sieving_array.get(&x_i64) {
-            if *rem_log < threshold {
-                let x = BigInt::from(x_i64);
-                let q_x = &a * x.pow(2) + BigInt::from(2) * &b * &x + &c;
-                if q_x.is_zero() {
-                    continue;
-                }
-                if let Some(exp_vector) = trial_division(&q_x, &factor_base) {
-                    smooth_relations.push(exp_vector);
-                    smooth_x_vals.push(x);
+        if let Some(final_q) = sieving_values.get(&x_i64) {
+            if final_q.abs().is_one() {
+                if let Some(exp_vec) = exponent_vectors.get_mut(&x_i64) {
+                    if final_q.is_negative() {
+                        exp_vec[0] = 1;
+                    }
+                    smooth_relations.push(exp_vec.clone());
+                    smooth_x_vals.push(BigInt::from(x_i64));
                     poly_params_list.push((a.clone(), b.clone()));
                 }
             }
+        }
+        if smooth_relations.len() >= needed_relations {
+            break;
         }
     }
 
