@@ -14,8 +14,8 @@ The algorithm's goal is to find a non-trivial factor of a number `n` by finding 
 * **Description:** The main `mpqs()` function begins by setting parameters. It calls `find_factor_base()` to generate a set of small prime numbers `p` (the factor base) where `n` is a quadratic residue modulo `p`. It then selects a polynomial `Q(x) = ax² + 2bx + c` by choosing `a` as a perfect square and solving for `b` such that `b² ≡ n (mod a)`. This modular square root for a prime-power modulus is handled by `mod_sqrt_prime_power()`.
 
 ### 2. Sieving for Smooth Relations
-* **Function:** `mpqs()` , `solve_poly_mod_p()`, `trial_division()`
-* **Description:** The algorithm sieves over a given interval `[-M, M]` to find "smooth" numbers, which are numbers that factor completely over the established factor base. For each prime `p` in the base, `solve_poly_mod_p()` finds the roots of `Q(x) ≡ 0 (mod p)` to identify arithmetic progressions where `Q(x)` is divisible by `p`. After an efficient logarithmic sieve identifies likely candidates, `trial_division()` confirms if they are truly smooth.
+* **Function(s):** `mpqs()` (sieving loop), `solve_poly_mod_p()`
+* **Description:** The algorithm sieves over a given interval `[-M, M]` to find "smooth" numbers, which are numbers that factor completely over the established factor base. This implementation uses an **Exact Division Sieve**.  For each prime `p` in the factor base, `solve_poly_mod_p()` is called to find the roots of `Q(x) ≡ 0 (mod p)` to identify arithmetic progressions. The algorithm then divides out `p` from each `Q(x)` value in these progressions. Unlike a logarithmic sieve, this process is precise. 
 
 ### 3. Linear Algebra
 * **Function:** `build_and_solve_matrix()`
